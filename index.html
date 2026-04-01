@@ -989,47 +989,100 @@ function renderDBPicker(){
 }
 function quickAdd(name){ snapshot(); formula.push({name,weight:0}); basePcts.push(0); closeModal(); renderAll(); showToast(`「${name}」已加入`); }
 
+// ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
+// 👇 填入你嘅 Supabase Project URL 同 anon key
+const SUPABASE_URL = 'https://xqwzkwafpuzajffrllch.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_2f8x70GyXzGte7oYb20X9Q_jWJKB…';
+
+async function sbFetch(path, options={}){
+  const res = await fetch(SUPABASE_URL+'/rest/v1/'+path, {
+    headers:{
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer '+SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': options.prefer||'',
+      ...options.headers
+    },
+    ...options
+  });
+  if(!res.ok){ const err=await res.text(); throw new Error(err); }
+  if(res.status===204) return null;
+  return res.json();
+}
+
 // ── SAVE/LOAD ─────────────────────────────────────────────────────────────────
-function saveRecipe(){
+async function saveRecipe(){
   const name=document.getElementById('recipeName').value.trim();
   if(!name){showToast('請輸入配方名稱');return}
-  const saved=JSON.parse(localStorage.getItem('gelatolab_v3')||'{}');
-  saved[name]={formula:JSON.parse(JSON.stringify(formula)),basePcts:[...basePcts],
-    target:getT(),baseTarget,recipeType,pkgItems:JSON.parse(JSON.stringify(pkgItems)),date:new Date().toLocaleDateString()};
-  localStorage.setItem('gelatolab_v3',JSON.stringify(saved));
-  renderSaved(); showToast(`「${name}」已儲存 ✓`);
+  const payload={
+    formula:JSON.parse(JSON.stringify(formula)),
+    basePcts:[...basePcts],
+    target:getT(), baseTarget, recipeType,
+    pkgItems:JSON.parse(JSON.stringify(pkgItems)),
+    date:new Date().toLocaleDateString()
+  };
+  try{
+    // 先查係咪已存在（用 name 作唯一識別）
+    const existing = await sbFetch(`recipes?name=eq.${encodeURIComponent(name)}&select=id`);
+    if(existing && existing.length>0){
+      // UPDATE
+      await sbFetch(`recipes?name=eq.${encodeURIComponent(name)}`,{
+        method:'PATCH', prefer:'return=minimal',
+        body: JSON.stringify({data: payload})
+      });
+    } else {
+      // INSERT
+      await sbFetch('recipes',{
+        method:'POST', prefer:'return=minimal',
+        body: JSON.stringify({name, data: payload})
+      });
+    }
+    renderSaved(); showToast(`「${name}」已儲存 ✓`);
+  } catch(err){ showToast('儲存失敗：'+err.message); }
 }
-function loadRecipe(name){
-  const saved=JSON.parse(localStorage.getItem('gelatolab_v3')||'{}');
-  if(!saved[name])return; snapshot();
-  const r=saved[name];
-  formula=r.formula;
-  basePcts=r.basePcts||r.formula.map(f=>f.weight/Math.max(r.formula.reduce((a,x)=>a+x.weight,0),1));
-  baseTarget=r.baseTarget||r.target||1000;
-  pkgItems=r.pkgItems||pkgItems;
-  document.getElementById('targetWeight').value=r.target;
-  document.getElementById('recipeName').value=name;
-  if(r.recipeType)_setType(r.recipeType);
-  updateScaleRatio(); renderAll(); showToast(`已載入「${name}」`);
+
+async function loadRecipe(name){
+  try{
+    const rows = await sbFetch(`recipes?name=eq.${encodeURIComponent(name)}&select=data`);
+    if(!rows||!rows.length){showToast('找不到配方');return;}
+    snapshot();
+    const r=rows[0].data;
+    formula=r.formula;
+    basePcts=r.basePcts||r.formula.map(f=>f.weight/Math.max(r.formula.reduce((a,x)=>a+x.weight,0),1));
+    baseTarget=r.baseTarget||r.target||1000;
+    pkgItems=r.pkgItems||pkgItems;
+    document.getElementById('targetWeight').value=r.target;
+    document.getElementById('recipeName').value=name;
+    if(r.recipeType)_setType(r.recipeType);
+    updateScaleRatio(); renderAll(); showToast(`已載入「${name}」`);
+  } catch(err){ showToast('載入失敗：'+err.message); }
 }
-function deleteRecipe(name,e){
+
+async function deleteRecipe(name,e){
   e.stopPropagation(); if(!confirm(`刪除「${name}」？`))return;
-  const saved=JSON.parse(localStorage.getItem('gelatolab_v3')||'{}');
-  delete saved[name]; localStorage.setItem('gelatolab_v3',JSON.stringify(saved));
-  renderSaved(); showToast(`已刪除`);
+  try{
+    await sbFetch(`recipes?name=eq.${encodeURIComponent(name)}`,{method:'DELETE'});
+    renderSaved(); showToast('已刪除');
+  } catch(err){ showToast('刪除失敗：'+err.message); }
 }
-function renderSaved(){
-  const saved=JSON.parse(localStorage.getItem('gelatolab_v3')||'{}');
-  const wrap=document.getElementById('savedList'); wrap.innerHTML='';
-  const keys=Object.keys(saved).reverse();
-  if(!keys.length){wrap.innerHTML='<div class="empty-state">暫無已儲存配方</div>';return}
-  keys.forEach(name=>{
-    const d=document.createElement('div'); d.className='saved-item';
-    d.innerHTML=`<span class="saved-nm" onclick="loadRecipe('${name}')">${name}</span>
-      <span class="saved-dt">${saved[name].date}</span>
-      <button class="saved-del" onclick="deleteRecipe('${name}',event)">✕</button>`;
-    wrap.appendChild(d);
-  });
+
+async function renderSaved(){
+  const wrap=document.getElementById('savedList');
+  wrap.innerHTML='<div class="empty-state">載入中…</div>';
+  try{
+    const rows = await sbFetch('recipes?select=name,data&order=created_at.desc');
+    wrap.innerHTML='';
+    if(!rows||!rows.length){wrap.innerHTML='<div class="empty-state">暫無已儲存配方</div>';return}
+    rows.forEach(row=>{
+      const d=document.createElement('div'); d.className='saved-item';
+      const name=row.name;
+      const date=row.data&&row.data.date||'';
+      d.innerHTML=`<span class="saved-nm" onclick="loadRecipe('${name.replace(/'/g,"\\'")}')">${name}</span>
+        <span class="saved-dt">${date}</span>
+        <button class="saved-del" onclick="deleteRecipe('${name.replace(/'/g,"\\'")}',event)">✕</button>`;
+      wrap.appendChild(d);
+    });
+  } catch(err){ wrap.innerHTML=`<div class="empty-state" style="color:var(--red)">連線失敗，請檢查 Supabase 設定</div>`; }
 }
 
 // ── DEMO ──────────────────────────────────────────────────────────────────────
