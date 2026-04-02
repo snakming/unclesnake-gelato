@@ -990,8 +990,9 @@ function renderDBPicker(){
 function quickAdd(name){ snapshot(); formula.push({name,weight:0}); basePcts.push(0); closeModal(); renderAll(); showToast(`「${name}」已加入`); }
 
 // ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://xqwzkwafpuzajffrllch.supabase.co'
-const SUPABASE_KEY = 'sb_publishable_2f8x70GyXzGte7oYb20X9Q_jWJKB2mI'
+// 👇 填入你嘅 Supabase Project URL 同 anon key
+const SUPABASE_URL = 'https://xqwzkwafpuzajffrllch.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhxd3prd2FmcHV6YWpmZnJsbGNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNTQ3MzUsImV4cCI6MjA5MDYzMDczNX0.I7DeKul08OHrbjBhB2bUwdxYJJvouBXhJeb3uPZIZKc';
 
 async function sbFetch(path, options={}){
   const res = await fetch(SUPABASE_URL+'/rest/v1/'+path, {
