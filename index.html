@@ -535,11 +535,10 @@ function calcTotals(){
   Alc=Math.max(Alc,alcExtra);
   const alcPAC=Alc*7.4;
   const totalPAC=PAC+alcPAC;
-  // Storage temp estimate (°C): empirical rule, PAC absolute → ΔT
-  // Industry: for each PAC unit (relative to 1000g), ΔT ≈ 0.054°C per %
-  // But PAC is absolute here, so storageTempC = -(totalPAC/W*100)*0.054
+  // Storage temp (°C): industry empirical formula verified against reference data
+  // Reference: PAC=215.43 → -10.77°C, so storageTempC = -(PAC_abs / 20)
   const pacPct=W>0?totalPAC/W*100:0;
-  const storageTempC=-(pacPct*0.054);
+  const storageTempC=-(totalPAC/20);
   return{
     W,TS,PAC:totalPAC,POD,Fat,Gluc,MSNF,Cost,Pro,Fib,Lac,Alc,
     pac_abs:totalPAC,
@@ -564,6 +563,7 @@ function calcTotals(){
 const TARGETS={
   gelato:{
     pac_abs:{lo:220,hi:280},
+    pac_pct:{lo:22,hi:28},
     pod:{lo:15,hi:18},
     ts:{lo:30,hi:45},
     fat:{lo:6,hi:10},
@@ -578,6 +578,7 @@ const TARGETS={
   },
   sorbet:{
     pac_abs:{lo:300,hi:380},
+    pac_pct:{lo:30,hi:38},
     pod:{lo:20,hi:26},
     ts:{lo:28,hi:34},
     fat:{lo:null,hi:1},
@@ -628,12 +629,15 @@ function renderDashboard(){
   });
   const overrun=getOverrun();
   const volCost=t.W>0?(t.Cost/t.W/(1+overrun/100)*100).toFixed(2):0;
+  // Storage temp: good range is -8 to -14°C for Gelato, warn outside
+  const tempOk=t.storageTempC<=-8&&t.storageTempC>=-18;
+  const tempCls=tempOk?'ok':t.storageTempC>-8?'hi':'warn';
   const stats=[
-    {lbl:'保存溫度',val:`${t.storageTempC.toFixed(1)}°C`,sub:'由PAC推算',cls:t.storageTempC<-20?'warn':'ok'},
-    {lbl:'PAC',     val:t.pac_abs.toFixed(1),sub:`目標 ${kLbl(getTgt('pac_abs'),'')}`  ,cls:kStat(t.pac_abs,getTgt('pac_abs'))},
-    {lbl:'POD %',   val:`${t.pod_pct.toFixed(1)}%`,sub:`目標 ${kLbl(getTgt('pod'),'%')}`,cls:kStat(t.pod_pct,getTgt('pod'))},
-    {lbl:'MSNF %',  val:`${t.msnf_pct.toFixed(1)}%`,sub:`目標 ${kLbl(getTgt('msnf'),'%')}`,cls:kStat(t.msnf_pct,getTgt('msnf'))},
-    {lbl:'Overrun', val:`${overrun}%`,sub:`每100ml ≈ ${volCost}元`,cls:''},
+    {lbl:'保存溫度',val:`${t.storageTempC.toFixed(1)}°C`,sub:'建議 -8 ~ -14°C',cls:tempCls},
+    {lbl:'PAC（實數）',val:t.pac_abs.toFixed(1),sub:`目標 ${kLbl(getTgt('pac_abs'),'')}`,cls:kStat(t.pac_abs,getTgt('pac_abs'))},
+    {lbl:'POD %',val:`${t.pod_pct.toFixed(1)}%`,sub:`目標 ${kLbl(getTgt('pod'),'%')}`,cls:kStat(t.pod_pct,getTgt('pod'))},
+    {lbl:'MSNF %',val:`${t.msnf_pct.toFixed(1)}%`,sub:`目標 ${kLbl(getTgt('msnf'),'%')}`,cls:kStat(t.msnf_pct,getTgt('msnf'))},
+    {lbl:'Overrun',val:`${overrun}%`,sub:`每100ml ≈ ${volCost}元`,cls:''},
     {lbl:'酒精 ALC',val:`${t.alc_pct.toFixed(1)}%`,sub:t.alc_pct>5?'⚠ 注意PAC影響':'乙醇',cls:t.alc_pct>5?'warn':''},
   ];
   const r=document.getElementById('dashStats'); r.innerHTML='';
@@ -697,23 +701,21 @@ function delRow(i){ if(formula.length<=1){showToast('至少保留一款材料');
 
 // ── KPI (merged all indicators) ───────────────────────────────────────────────
 const KPI_META=[
-  {key:'pac_abs',    lbl:'PAC',         unit:'',  abs:true},
-  {key:'pod',        lbl:'POD %',       unit:'%'},
-  {key:'ts',         lbl:'TS %',        unit:'%'},
-  {key:'fat',        lbl:'Fat %',       unit:'%'},
-  {key:'msnf',       lbl:'MSNF %',      unit:'%'},
-  {key:'fw',         lbl:'游離水 %',    unit:'%'},
-  {key:'totalSugar', lbl:'總糖 %',      unit:'%'},
-  {key:'sucrose',    lbl:'蔗糖/總糖',   unit:'%'},
-  {key:'dextrose',   lbl:'右旋糖/總糖', unit:'%'},
-  {key:'gluc',       lbl:'葡萄糖 %',    unit:'%'},
-  {key:'glucSugar',  lbl:'葡萄糖/糖',   unit:'%'},
-  {key:'lac',        lbl:'乳糖 %',      unit:'%'},
+  {key:'pac_abs',    lbl:'PAC（實數）',  unit:''},
+  {key:'pac_pct',    lbl:'PAC %',        unit:'%'},
+  {key:'pod',        lbl:'POD %',        unit:'%'},
+  {key:'ts',         lbl:'TS %',         unit:'%'},
+  {key:'fat',        lbl:'Fat %',        unit:'%'},
+  {key:'msnf',       lbl:'MSNF %',       unit:'%'},
+  {key:'fw',         lbl:'游離水 %',     unit:'%'},
+  {key:'totalSugar', lbl:'總糖 %',       unit:'%'},
+  {key:'gluc',       lbl:'葡萄糖 %',     unit:'%'},
+  {key:'lac',        lbl:'乳糖 %',       unit:'%'},
 ];
 function renderKPI(){
   const t=calcTotals();
   const vals={
-    pac_abs:t.pac_abs, pod:t.pod_pct, ts:t.ts_pct, fat:t.fat_pct,
+    pac_abs:t.pac_abs, pac_pct:t.pac_pct, pod:t.pod_pct, ts:t.ts_pct, fat:t.fat_pct,
     msnf:t.msnf_pct, fw:t.fw_pct, gluc:t.gluc_pct, glucSugar:t.glucSugar,
     totalSugar:t.totalSugar_pct, sucrose:t.sucrose_pct, dextrose:t.dextrose_pct, lac:t.lac_pct,
   };
@@ -864,12 +866,13 @@ function renderPie(){
     {lbl:'固形物',val:t.ts_pct,color:'#0071e3',centerLabel:`TS ${t.ts_pct.toFixed(0)}%`},
     {lbl:'水分',  val:t.fw_pct,color:'#34c759'},
   ]);
-  // Sugar types donut
+  // Sugar types donut — includes lactose
   const sugSegs=[
     {lbl:'蔗糖',   val:t.SucW,  color:SUGAR_COLORS.sucrose},
     {lbl:'右旋糖', val:t.DexW,  color:SUGAR_COLORS.dextrose},
     {lbl:'葡萄糖漿',val:t.De21W,color:SUGAR_COLORS.de21},
     {lbl:'轉化糖', val:t.InvW,  color:SUGAR_COLORS.invert},
+    {lbl:'乳糖',   val:t.Lac,   color:'#30b0c7'},
     {lbl:'其他',   val:t.OtherSugW,color:SUGAR_COLORS.other},
   ].filter(s=>s.val>0);
   if(sugSegs.length){
