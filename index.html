@@ -211,6 +211,65 @@ input.pkg-ci:focus{border-color:var(--accent);background:#fff}
   .app{display:block;height:auto}.main-col,.side-col{overflow:visible;padding:6px}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* ── MOBILE ── */
+@media(max-width:768px){
+  /* Header: hide text labels, keep icon buttons */
+  header{padding:0 12px;height:44px}
+  .logo{font-size:13px}
+  .btn{height:32px;padding:0 10px;font-size:12px}
+  .btn-icon{width:32px}
+  /* Show only essential header buttons on mobile */
+  .hbtns .sep{display:none}
+  /* Full-width single column */
+  .app{grid-template-columns:1fr;height:auto;overflow:visible}
+  .main-col{padding:10px;gap:8px}
+  .side-col{padding:10px;border-left:none;border-top:1px solid var(--b);gap:8px}
+  /* Target bar: stack vertically */
+  .tbar{padding:10px 12px}
+  .tbar-inner{gap:8px}
+  .tbar-inner>*{flex-shrink:0}
+  #targetWeight{font-size:18px;width:64px}
+  /* Dashboard: 2 cols instead of 4 */
+  .dash-grid{grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
+  .dkpi{padding:9px 10px}
+  .dkpi-val{font-size:18px}
+  /* Stats row: 2 cols */
+  .stat-row{grid-template-columns:1fr 1fr;gap:6px}
+  .dstat{padding:7px 9px}
+  .dstat-val{font-size:13px}
+  /* Table: horizontal scroll, smaller text */
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{font-size:10.5px;min-width:700px}
+  thead th{font-size:9px;padding:4px 5px}
+  td{padding:4px 5px;font-size:10.5px}
+  td:first-child{font-size:11px;min-width:80px}
+  input.ci{width:54px;font-size:10px}
+  /* Bottom 3-col → 1-col stack */
+  .main-col>div[style*="grid-template-columns:1fr 1fr 1fr"]{
+    display:flex;flex-direction:column;gap:8px
+  }
+  /* Pie charts: smaller */
+  canvas{max-width:90px;max-height:90px}
+  /* KPI grid: 2 cols already fine */
+  .kpi{padding:6px 8px}
+  .kpi-val{font-size:12px}
+  /* Modal: full screen on mobile */
+  .modal{width:100%!important;max-width:100%;border-radius:16px 16px 0 0;position:fixed;bottom:0;max-height:90vh}
+  .overlay{align-items:flex-end}
+  /* Type toggle: smaller */
+  .type-btn{padding:3px 8px;font-size:10.5px}
+  /* Overrun/ALC inputs */
+  .tbar-inner input[type=number][style]{width:44px!important}
+}
+
+@media(max-width:420px){
+  /* Very small phones (iPhone SE etc) */
+  .dash-grid{grid-template-columns:1fr 1fr}
+  .stat-row{grid-template-columns:1fr 1fr}
+  .dkpi-val{font-size:16px}
+  header .btn:not(.btn-accent):not(#undoBtn):not(#redoBtn){display:none}
+}
 </style>
 </head>
 <body>
@@ -1040,7 +1099,8 @@ async function saveRecipe(){
         body: JSON.stringify({name, data: payload})
       });
     }
-    renderSaved(); showToast(`「${name}」已儲存 ✓`);
+    showToast(`「${name}」已儲存 ✓`);
+    setTimeout(()=>renderSaved(), 800);
   } catch(err){ showToast('儲存失敗：'+err.message); }
 }
 
